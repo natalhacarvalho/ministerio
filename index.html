@@ -1048,19 +1048,16 @@ function parseCifraClubHtml_(html,url){
 }
 /* Tenta buscar e interpretar a cifra automaticamente, testando cada proxy em sequência. */
 function autoFetchCifra_(url){
-  function tryAt(i){
-    if(i>=CIFRA_PROXIES_.length) return Promise.reject(new Error('all_proxies_failed'));
-    var pUrl=CIFRA_PROXIES_[i](url);
-    return fetch(pUrl).then(function(r){
-      if(!r.ok) throw new Error('http_'+r.status);
-      return r.text();
-    }).then(function(html){
-      var parsed=parseCifraClubHtml_(html,url);
-      if(!parsed.body || parsed.body.length<20) throw new Error('empty_body');
-      return parsed;
-    }).catch(function(){ return tryAt(i+1); });
-  }
-  return tryAt(0);
+  var pUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+  return fetch(pUrl).then(function(r){
+    if(!r.ok) throw new Error('http_'+r.status);
+    return r.json();
+  }).then(function(data){
+    if(!data.contents) throw new Error('empty_contents');
+    var parsed=parseCifraClubHtml_(data.contents,url);
+    if(!parsed.body || parsed.body.length<20) throw new Error('empty_body');
+    return parsed;
+  });
 }
 /* Lê o texto colado: separa cabeçalho (título/artista/tom) do corpo da cifra. */
 function parsePastedCifra_(raw){
@@ -1097,44 +1094,30 @@ function importSheet(eventId,collectionId){
     '<div class="sheet-head"><h2>Importar cifra</h2><button class="x" onclick="closeSheet()">✕</button></div>'+
     '<label style="margin-top:0">Link da música do Cifra Club</label>'+
     '<input type="text" id="imp_url" placeholder="https://www.cifraclub.com.br/artista/musica/">'+
-    '<div class="acts" style="justify-content:flex-start;margin:8px 0 16px">'+
-      '<button class="btn gold" id="impUrlBtn" onclick="doImpUrl()">🔎 Buscar automaticamente</button>'+
+    '<div class="acts" style="margin:16px 0">'+
+      '<button class="btn gold block" id="impUrlBtn" onclick="doImpUrl()">⤓ Importar Automaticamente</button>'+
     '</div>'+
-    '<label>Ou cole aqui a cifra copiada</label>'+
-    '<textarea id="imp_paste" placeholder="Se a busca automática falhar: abra a música no Cifra Club, selecione a cifra, copie (Ctrl+C) e cole aqui." style="height:220px"></textarea>'+
-    '<div class="hint" id="impMsg">Informe o link e clique em "Buscar automaticamente". Se não funcionar, cole o texto copiado do Cifra Club abaixo.</div>'+
-    '<div class="acts" style="justify-content:space-between">'+
+    '<div class="hint" id="impMsg">Cole o link da música e clique no botão acima para importar a cifra com tom e acordes originais.</div>'+
+    '<div class="acts" style="justify-content:flex-start; margin-top:20px;">'+
       '<button class="btn" onclick="closeSheet()">← Voltar</button>'+
-      '<button class="btn gold" id="impBtn" onclick="doImpPaste()">Continuar →</button>'+
     '</div>'
   );
 }
 function doImpUrl(){
   var url=document.getElementById('imp_url').value.trim();
   if(!url) return toast('Cole o link da música do Cifra Club');
-  if(!/cifraclub\.com\.br/i.test(url)) return toast('Informe um link do Cifra Club');
+  if(!/cifraclub\.com\.br/i.test(url)) return toast('Informe um link válido do Cifra Club');
   var btn=document.getElementById('impUrlBtn'), msg=document.getElementById('impMsg');
-  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin"></span> Buscando…'; }
-  if(msg) msg.textContent='Buscando a cifra automaticamente…';
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin"></span> Importando...'; }
+  if(msg) msg.textContent='Buscando e formatando a cifra...';
+  
   autoFetchCifra_(url).then(function(r){
     openImportPreview(r,url,impEvent,impCollection);
-  }).catch(function(){
-    if(btn){ btn.disabled=false; btn.innerHTML='🔎 Buscar automaticamente'; }
-    if(msg) msg.textContent='Não foi possível buscar automaticamente agora. Cole a cifra copiada abaixo e clique em "Continuar".';
-    toast('Busca automática falhou — cole a cifra manualmente');
+  }).catch(function(e){
+    if(btn){ btn.disabled=false; btn.innerHTML='⤓ Importar Automaticamente'; }
+    if(msg) msg.innerHTML='<span style="color:var(--danger)">Erro ao importar. Verifique o link ou a conexão.</span>';
+    toast('Falha na importação automática');
   });
-}
-function doImpPaste(){
-  var url=document.getElementById('imp_url').value.trim();
-  var raw=document.getElementById('imp_paste').value;
-  if(!raw||!raw.trim()) return toast('Cole a cifra copiada do Cifra Club');
-  var r=parsePastedCifra_(raw);
-  if(url){
-    var mu=metaFromUrl_(url);
-    if(!r.title) r.title=mu.title;
-    if(!r.artist) r.artist=mu.artist;
-  }
-  openImportPreview(r,url,impEvent,impCollection);
 }
 function highlightCifraStatic(body){
   return (body||'').split('\n').map(function(l){
@@ -1318,3 +1301,4 @@ function renderAll(){refreshLock();renderEvents();renderSongs();renderCollection
 </script>
 </body>
 </html>
+
